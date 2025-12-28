@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 关键：强制横屏显示（移动设备生效），锁定屏幕方向 -->
+    <meta name="screen-orientation" content="landscape">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0">
+    <title>北半球星空数据可视化大屏（横屏版）</title>
+    <!-- 引入外部资源 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <!-- 配置Tailwind：强化横屏适配的间距、尺寸规则 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        space: {
+                            black: '#040C2C',
+                            dark: '#0A1128',
+                            blue: '#12235C',
+                            light: '#1E3A8A',
+                            accent: '#3B82F6'
+                        },
+                        star: {
+                            white: '#E0E0FF',
+                            yellow: '#FFD700',
+                            blue: '#93C5FD',
+                            red: '#F87171'
+                        }
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif']
+                    },
+                    spacing: {
+                        // 横屏场景下的紧凑间距
+                        '1.5': '0.375rem',
+                        '2.5': '0.625rem'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- 自定义样式：核心优化横屏布局 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .chart-glow {
+                box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+            }
+            .star-pulse {
+                animation: pulse 3s infinite ease-in-out;
+            }
+            /* 横屏专用：强制容器占满屏幕，禁止纵向滚动 */
+            .landscape-container {
+                width: 100vw !important;
+                height: 100vh !important;
+                overflow: hidden !important;
+            }
+            /* 横屏图表标题：更小间距，适配紧凑布局 */
+            .chart-title {
+                height: 24px !important;
+                line-height: 24px !important;
+                margin-bottom: 0.5rem !important;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+
+        /* 星空背景：横屏满屏覆盖 */
+        #star-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite alternate;
+        }
+
+        @keyframes twinkle {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        /* 图表容器：横屏适配 - 取消hover位移（避免遮挡），优化高度计算 */
+        .chart-container {
+            transition: all 0.3s ease;
+            height: 100% !important;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-container:hover {
+            transform: none; /* 横屏场景下取消hover上移，防止跨区域遮挡 */
+            z-index: 5;
+        }
+
+        /* 星空演化图：横屏比例优化 */
+        #stellar-evolution-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+
+        #stellar-evolution-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 8s ease-in-out;
+        }
+
+        #stellar-evolution-container:hover #stellar-evolution-image {
+            transform: scale(1.03); /* 横屏缩小缩放幅度，避免画面溢出 */
+        }
+
+        .image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px; /* 横屏缩小内边距 */
+            background: linear-gradient(transparent, rgba(4, 12, 44, 0.95));
+            color: white;
+            font-size: 0.8rem; /* 横屏缩小文字 */
+        }
+
+        /* 强制横屏提示（移动设备） */
+        #landscape-tip {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(4, 12, 44, 0.98);
+            color: #FFD700;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            text-align: center;
+            padding: 2rem;
+            display: none; /* 默认隐藏 */
+        }
+        #landscape-tip i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            animation: rotate 3s infinite linear;
+        }
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 媒体查询：仅在移动设备竖屏时显示强制横屏提示 */
+        @media (max-aspect-ratio: 1/1) and (max-width: 768px) {
+            #landscape-tip {
+                display: flex;
+            }
+            .container {
+                display: none !important; /* 竖屏时隐藏主内容 */
+            }
+        }
+    </style>
+
+    <!-- 引入字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="bg-space-black text-gray-100 font-inter overflow-hidden relative">
+<!-- 移动设备竖屏时显示：强制横屏提示 -->
+<div id="landscape-tip">
+    <i class="fa fa-mobile"></i>
+    <h2 class="mb-2">请横屏查看以获得最佳体验</h2>
+    <p>本大屏专为横屏设计，横屏后将展示完整星空数据</p>
+</div>
+
+<!-- 动态星空背景（横屏满屏） -->
+<div id="star-background"></div>
+
+<!-- 主容器：横屏强制满屏，取消多余间距 -->
+<div class="container mx-auto p-2 landscape-container flex flex-col">
+    <!-- 顶部标题区域：横屏紧凑布局，减少上下间距 -->
+    <header class="mb-2">
+        <div class="flex flex-row justify-between items-center gap-2">
+            <div class="flex items-center">
+                <i class="fa fa-star text-star-yellow mr-2 text-xl star-pulse"></i>
+                <h1 class="text-[clamp(1.2rem,2vw,2rem)] font-bold tracking-wide">北半球星空数据可视化系统</h1>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center text-sm">
+                    <span class="mr-1">当前时间:</span>
+                    <span id="current-time" class="text-star-blue"></span>
+                </div>
+                <div class="flex items-center text-sm">
+                    <span class="mr-1">数据更新:</span>
+                    <span id="update-time" class="text-star-blue">实时</span>
+                </div>
+                <button id="refresh-btn" class="bg-space-light hover:bg-space-accent px-3 py-1.5 rounded-md transition-all duration-300 flex items-center text-sm">
+                    <i class="fa fa-refresh mr-1.5"></i>刷新
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主图表区域：核心优化！横屏12列均分，高度100%填充 -->
+    <main class="flex-1 grid grid-cols-12 gap-2 h-[calc(100%-60px)]">
+        <!-- 左侧3个图表：占3列，高度均分（横屏更紧凑） -->
+        <div class="col-span-3 flex flex-col gap-2 h-full">
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-sun-o mr-1.5"></i>恒星亮度分布
+                </h3>
+                <div id="chart1" class="w-full flex-1"></div>
+            </div>
+
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-connectdevelop mr-1.5"></i>星座分布
+                </h3>
+                <div id="chart2" class="w-full flex-1"></div>
+            </div>
+
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-dot-circle-o mr-1.5"></i>星体类型占比
+                </h3>
+                <div id="chart3" class="w-full flex-1"></div>
+            </div>
+        </div>
+
+        <!-- 中间2个图表：占6列，上下分布（横屏核心区域放大） -->
+        <div class="col-span-6 flex flex-col gap-2 h-full">
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-globe mr-1.5"></i>北半球星空星座图
+                </h3>
+                <div id="stellar-evolution-container" class="w-full flex-1">
+                    <img
+                            id="stellar-evolution-image"
+                            src="https://www.stellarcatalog.com/img/stellar-evolution.webp"
+                            alt="恒星演化示意图，展示了恒星从诞生到死亡的不同阶段"
+                    >
+                    <div class="image-overlay">
+                        恒星演化过程：从星云到主序星，再到红巨星、白矮星或超新星
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-line-chart mr-1.5"></i>主要星体运动轨迹
+                </h3>
+                <div id="chart5" class="w-full flex-1"></div>
+            </div>
+        </div>
+
+        <!-- 右侧3个图表：占3列，高度均分（与左侧对称） -->
+        <div class="col-span-3 flex flex-col gap-2 h-full">
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-arrows-h mr-1.5"></i>星系距离分布
+                </h3>
+                <div id="chart6" class="w-full flex-1"></div>
+            </div>
+
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-cloud mr-1.5"></i>星云密度分布
+                </h3>
+                <div id="chart7" class="w-full flex-1"></div>
+            </div>
+
+            <div class="chart-container bg-space-dark rounded-lg p-2 border border-space-light chart-glow">
+                <h3 class="text-center chart-title text-star-blue font-medium flex items-center justify-center text-xs md:text-sm">
+                    <i class="fa fa-calendar mr-1.5"></i>近期天文事件
+                </h3>
+                <div id="chart8" class="w-full flex-1"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部信息：横屏缩小文字，减少高度 -->
+    <footer class="mt-2 pt-1 border-t border-space-light text-center text-xs text-gray-400">
+        <p>数据来源: 国际天文联合会(IAU) | 天文观测卫星数据库 | 最后更新: <span id="footer-update-time"></span></p>
+    </footer>
+</div>
+
+<script>
+    // 创建星空背景（横屏满屏星星）
+    function createStarBackground() {
+        const container = document.getElementById('star-background');
+        const starCount = 500; // 横屏增加星星数量，提升视觉效果
+
+        for (let i = 0; i < starCount; i++) {
+            const star = document.createElement('div');
+            star.classList.add('star');
+
+            // 随机位置（覆盖横屏全屏）
+            const x = Math.random() * 100;
+            const y = Math.random() * 100;
+
+            // 随机大小（横屏调整星星尺寸范围）
+            const size = Math.random() * 2.5 + 0.3;
+
+            // 随机亮度和颜色
+            const opacity = Math.random() * 0.9 + 0.1;
+            const colors = ['#ffffff', '#FFD700', '#93C5FD', '#F87171'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+
+            // 应用样式
+            star.style.left = `${x}%`;
+            star.style.top = `${y}%`;
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            star.style.opacity = opacity;
+            star.style.backgroundColor = color;
+            star.style.animationDelay = `${Math.random() * 3}s`;
+
+            container.appendChild(star);
+        }
+    }
+
+    // 更新时间显示
+    function updateTimeDisplay() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString();
+        const dateStr = now.toLocaleDateString();
+        const fullTime = `${dateStr} ${timeStr}`;
+
+        document.getElementById('current-time').textContent = fullTime;
+        document.getElementById('footer-update-time').textContent = fullTime;
+    }
+
+    // 生成模拟星空数据
+    function generateStarData() {
+        // 1. 恒星亮度分布数据
+        const brightnessLevels = ['1等星', '2等星', '3等星', '4等星', '5等星', '6等星', '7等星', '8等星'];
+        const brightnessData = brightnessLevels.map(level => ({
+            name: level,
+            value: Math.floor(Math.random() * 800) + 200
+        }));
+
+        // 2. 星座分布数据
+        const constellations = ['大熊座', '小熊座', '仙后座', '猎户座', '英仙座', '金牛座', '双子座', '狮子座'];
+        const constellationData = constellations.map(name => ({
+            name,
+            value: Math.floor(Math.random() * 60) + 20
+        }));
+
+        // 3. 星体类型占比
+        const starTypes = ['主序星', '红巨星', '白矮星', '中子星', '超新星', '黑洞'];
+        const starTypeData = starTypes.map(type => ({
+            name: type,
+            value: Math.floor(Math.random() * 100) + (type === '主序星' ? 300 : 50)
+        }));
+
+        // 4. 星体运动轨迹数据
+        const trackStars = ['北极星', '天狼星', '织女星', '大角星', '参宿四'];
+        const trackData = trackStars.map((star, index) => {
+            const data = Array.from({length: 24}, (_, i) => [
+                i, // 小时
+                20 + Math.sin(i * 0.3 + index) * 15 + Math.random() * 5 // 高度角
+            ]);
+            return { name: star, data };
+        });
+
+        // 5. 星系距离分布
+        const distanceRanges = ['<500万光年', '500-1000万', '1000-2000万', '2000-5000万', '5000万-1亿', '>1亿光年'];
+        const distanceData = distanceRanges.map(range => ({
+            name: range,
+            value: Math.floor(Math.random() * 40) + 10
+        }));
+
+        // 6. 星云密度分布
+        const nebulaRegions = ['天鹰座', '猎户座', '人马座', '金牛座', '天鹅座', '天蝎座', '双子座'];
+        const nebulaData = nebulaRegions.map(region => ({
+            name: region,
+            value: Math.random() * 80 + 20
+        }));
+
+        // 7. 近期天文事件
+        const astronomicalEvents = ['流星雨', '月食', '日食', '行星合相', '超新星爆发', '彗星经过'];
+        const eventData = astronomicalEvents.map(event => ({
+            name: event,
+            value: Math.floor(Math.random() * 5) + 1,
+            date: `${Math.floor(Math.random() * 12) + 1}月${Math.floor(Math.random() * 28) + 1}日`
+        }));
+
+        return {
+            brightnessData,
+            constellationData,
+            starTypeData,
+            trackData,
+            trackStars,
+            distanceData,
+            nebulaData,
+            eventData
+        };
+    }
+
+    // 初始化图表
+    let charts = {};
+    let starData = generateStarData();
+
+    function initCharts() {
+        // 图表1: 恒星亮度分布 - 柱状图
+        charts.chart1 = echarts.init(document.getElementById('chart1'));
+        charts.chart1.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            grid: { left: '5%', right: '5%', bottom: '15%', top: 0, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: starData.brightnessData.map(item => item.name),
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', rotate: 45, fontSize: 9 }
+            },
+            yAxis: {
+                type: 'value',
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 9 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+            },
+            series: [{
+                data: starData.brightnessData.map(item => item.value),
+                type: 'bar',
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: '#FFD700' },
+                        { offset: 1, color: '#F87171' }
+                    ])
+                },
+                animationDuration: 1500
+            }]
+        });
+
+        // 图表2: 星座分布 - 折线图
+        charts.chart2 = echarts.init(document.getElementById('chart2'));
+        charts.chart2.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            grid: { left: '5%', right: '5%', bottom: '15%', top: 0, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: starData.constellationData.map(item => item.name),
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', rotate: 45, fontSize: 9 }
+            },
+            yAxis: {
+                type: 'value',
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 9 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+            },
+            series: [{
+                data: starData.constellationData.map(item => item.value),
+                type: 'line',
+                symbol: 'star',
+                symbolSize: 6,
+                lineStyle: { width: 2, color: '#93C5FD' },
+                itemStyle: { color: '#FFD700' },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgba(147, 197, 253, 0.3)' },
+                        { offset: 1, color: 'rgba(147, 197, 253, 0)' }
+                    ])
+                },
+                animationDuration: 2000
+            }]
+        });
+
+        // 图表3: 星体类型占比 - 环形图
+        charts.chart3 = echarts.init(document.getElementById('chart3'));
+        charts.chart3.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: {c} ({d}%)',
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            legend: {
+                orient: 'vertical',
+                left: 0,
+                top: 'center',
+                textStyle: { color: '#fff', fontSize: 9 },
+                itemWidth: 8,
+                itemHeight: 8
+            },
+            series: [{
+                name: '星体类型',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                center: ['70%', '50%'],
+                avoidLabelOverlap: false,
+                itemStyle: {
+                    borderRadius: 4,
+                    borderColor: '#0A1128',
+                    borderWidth: 2
+                },
+                label: { show: false },
+                labelLine: { show: false },
+                data: starData.starTypeData,
+                color: ['#FFD700', '#93C5FD', '#F87171', '#A78BFA', '#6EE7B7', '#FCD34D'],
+                animationDuration: 1500
+            }]
+        });
+
+        // 图表5: 星体运动轨迹 - 多线图
+        charts.chart5 = echarts.init(document.getElementById('chart5'));
+        charts.chart5.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            legend: {
+                data: starData.trackStars,
+                textStyle: { color: '#fff', fontSize: 11 },
+                top: 0,
+                right: 10,
+                orient: 'horizontal'
+            },
+            grid: { left: '5%', right: '15%', bottom: '10%', top: '15%', containLabel: true },
+            xAxis: {
+                type: 'category',
+                name: '时间 (小时)',
+                nameTextStyle: { color: '#93C5FD', fontSize: 11 },
+                data: Array.from({length: 24}, (_, i) => i),
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 10 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+            },
+            yAxis: {
+                type: 'value',
+                name: '高度角 (°)',
+                nameTextStyle: { color: '#93C5FD', fontSize: 11 },
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 10 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+            },
+            series: starData.trackData.map((track, index) => {
+                const colors = ['#FFD700', '#93C5FD', '#F87171', '#A78BFA', '#6EE7B7'];
+                return {
+                    name: track.name,
+                    type: 'line',
+                    data: track.data,
+                    smooth: true,
+                    symbol: 'none',
+                    lineStyle: { width: 2, color: colors[index] },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: `${colors[index]}33` },
+                            { offset: 1, color: `${colors[index]}00` }
+                        ])
+                    },
+                    animationDuration: 2000,
+                    animationDelay: index * 200
+                };
+            })
+        });
+
+        // 图表6: 星系距离分布 - 横向柱状图
+        charts.chart6 = echarts.init(document.getElementById('chart6'));
+        charts.chart6.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            grid: { left: '40%', right: '5%', bottom: '15%', top: 0, containLabel: true },
+            xAxis: {
+                type: 'value',
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 9 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+            },
+            yAxis: {
+                type: 'category',
+                data: starData.distanceData.map(item => item.name),
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 9 },
+                inverse: true
+            },
+            series: [{
+                data: starData.distanceData.map(item => item.value),
+                type: 'bar',
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+                        { offset: 0, color: '#A78BFA' },
+                        { offset: 1, color: '#3B82F6' }
+                    ])
+                },
+                animationDuration: 1500
+            }]
+        });
+
+        // 图表7: 星云密度分布 - 雷达图
+        charts.chart7 = echarts.init(document.getElementById('chart7'));
+        charts.chart7.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            radar: {
+                indicator: starData.nebulaData.map(item => ({
+                    name: item.name,
+                    max: 100
+                })),
+                splitArea: {
+                    areaStyle: {
+                        color: ['rgba(167, 139, 250, 0.1)', 'rgba(167, 139, 250, 0.2)']
+                    }
+                },
+                axisLine: { lineStyle: { color: '#A78BFA' } },
+                splitLine: { lineStyle: { color: 'rgba(167, 139, 250, 0.3)' } },
+                name: { textStyle: { color: '#fff', fontSize: 9 } }
+            },
+            series: [{
+                type: 'radar',
+                symbol: 'circle',
+                symbolSize: 4,
+                lineStyle: { width: 2, color: '#A78BFA' },
+                itemStyle: { color: '#F87171' },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgba(167, 139, 250, 0.5)' },
+                        { offset: 1, color: 'rgba(248, 113, 113, 0.2)' }
+                    ])
+                },
+                data: [{ value: starData.nebulaData.map(item => item.value) }],
+                animationDuration: 2000
+            }]
+        });
+
+        // 图表8: 近期天文事件 - 柱状图
+        charts.chart8 = echarts.init(document.getElementById('chart8'));
+        charts.chart8.setOption({
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                formatter: params => {
+                    const event = starData.eventData.find(e => e.name === params[0].name);
+                    return `${params[0].name}<br/>发生次数: ${params[0].value}<br/>下次: ${event.date}`;
+                },
+                backgroundColor: 'rgba(10, 17, 40, 0.8)',
+                borderColor: '#1E3A8A',
+                textStyle: { color: '#fff' }
+            },
+            grid: { left: '5%', right: '5%', bottom: '15%', top: 0, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: starData.eventData.map(item => item.name),
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', rotate: 45, fontSize: 9 }
+            },
+            yAxis: {
+                type: 'value',
+                axisLine: { lineStyle: { color: '#3B82F6' } },
+                axisLabel: { color: '#fff', fontSize: 9 },
+                splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } },
+                min: 0
+            },
+            series: [{
+                data: starData.eventData.map(item => item.value),
+                type: 'bar',
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: '#6EE7B7' },
+                        { offset: 1, color: '#3B82F6' }
+                    ])
+                },
+                animationDuration: 1500
+            }]
+        });
+
+        // 窗口大小变化时重绘图表
+        window.addEventListener('resize', () => {
+            Object.values(charts).forEach(chart => chart.resize());
+        });
+    }
+
+    // 更新图表数据
+    function updateChartData() {
+        const newData = generateStarData();
+        starData = newData;
+
+        // 更新各个图表数据
+        charts.chart1.setOption({
+            series: [{ data: starData.brightnessData.map(item => item.value) }]
+        });
+
+        charts.chart2.setOption({
+            series: [{ data: starData.constellationData.map(item => item.value) }]
+        });
+
+        charts.chart3.setOption({
+            series: [{ data: starData.starTypeData }]
+        });
+
+        charts.chart5.setOption({
+            series: starData.trackData.map((track, index) => {
+                const colors = ['#FFD700', '#93C5FD', '#F87171', '#A78BFA', '#6EE7B7'];
+                return {
+                    name: track.name,
+                    data: track.data,
+                    lineStyle: { color: colors[index] }
+                };
+            })
+        });
+
+        charts.chart6.setOption({
+            series: [{ data: starData.distanceData.map(item => item.value) }]
+        });
+
+        charts.chart7.setOption({
+            series: [{
+                data: [{ value: starData.nebulaData.map(item => item.value) }]
+            }]
+        });
+
+        charts.chart8.setOption({
+            series: [{ data: starData.eventData.map(item => item.value) }]
+        });
+
+        // 更新时间并添加刷新动画
+        updateTimeDisplay();
+        const refreshBtn = document.getElementById('refresh-btn');
+        refreshBtn.classList.add('animate-spin');
+        setTimeout(() => refreshBtn.classList.remove('animate-spin'), 800);
+    }
+
+    // 页面加载完成后初始化
+    window.onload = function() {
+        createStarBackground();
+        updateTimeDisplay();
+        setInterval(updateTimeDisplay, 1000);
+        initCharts();
+
+        // 绑定刷新按钮事件
+        document.getElementById('refresh-btn').addEventListener('click', updateChartData);
+
+        // 自动刷新数据（每30秒）
+        setInterval(updateChartData, 30000);
+    };
+</script>
+</body>
+</html>
